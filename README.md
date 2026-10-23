@@ -1596,6 +1596,14 @@ non-negative numbers (including zero); invalid fields emit a warning naming the 
 and field and use the existing fallback independently, preserving valid measurements
 and other runs.
 
+The benchmark aggregator accepts `grading.json` directly under each evaluation's
+configuration directory (for example, `sales-report/with_skill/grading.json`), as
+well as repeated `run-N/grading.json` results. Evaluation directories may use
+`eval-N` names or descriptive names with an `eval_metadata.json` file. Both
+layouts also work under the legacy `runs/` wrapper. If a configuration contains
+both direct results and numbered run directories, only the numbered runs are
+included, so a result is not counted twice.
+
 `SKILL.md` YAML frontmatter must open and close with `---` on its own line (trailing spaces or tabs are allowed). A line such as `---suffix` is not a closing delimiter.
 
 Custom skill history preserves Unicode line separators inside saved content and metadata, keeping those revisions readable for history inspection and rollback. Malformed JSON history records are still rejected.

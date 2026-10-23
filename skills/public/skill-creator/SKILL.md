@@ -277,6 +277,13 @@ Once all runs are done:
    ```bash
    python -m scripts.aggregate_benchmark <workspace>/iteration-N --skill-name <name>
    ```
+   The aggregator reads `grading.json` directly from each configuration directory
+   (`with_skill/`, `without_skill/`, or `old_skill/`) and also supports repeated
+   `run-N/grading.json` results. Descriptively named eval directories are discovered
+   through their `eval_metadata.json`; `eval-N/` names remain supported without it.
+   If a configuration contains both direct grades and numbered run directories,
+   only the numbered runs are included to avoid double-counting.
+
    This produces `benchmark.json` and `benchmark.md` with pass_rate, time, and tokens for each configuration, with mean ± stddev and the delta. If generating benchmark.json manually, see `references/schemas.md` for the exact schema the viewer expects.
 Put each with_skill version before its baseline counterpart.
 

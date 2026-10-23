@@ -12,17 +12,15 @@ Usage:
 Example:
     python aggregate_benchmark.py benchmarks/2026-01-15T10-30-00/
 
-The script supports two directory layouts:
+The script supports direct evaluation results and numbered repeated runs:
 
     Workspace layout (from skill-creator iterations):
     <benchmark_dir>/
-    └── eval-N/
+    └── <eval-name>/          # eval-N or a directory with eval_metadata.json
         ├── with_skill/
-        │   ├── run-1/grading.json
-        │   └── run-2/grading.json
+        │   └── grading.json
         └── without_skill/
-            ├── run-1/grading.json
-            └── run-2/grading.json
+            └── grading.json
 
     Legacy layout (with runs/ subdirectory):
     <benchmark_dir>/
@@ -32,6 +30,10 @@ The script supports two directory layouts:
             │   └── run-1/grading.json
             └── without_skill/
                 └── run-1/grading.json
+
+Both run layouts work with or without the legacy runs/ wrapper. Direct results
+use run number 1. When a configuration also contains numbered run directories,
+only the numbered runs are aggregated to avoid counting the same result twice.
 """
 
 import argparse
@@ -87,19 +89,23 @@ def load_run_results(benchmark_dir: Path) -> dict:
     Returns dict keyed by config name (e.g. "with_skill"/"without_skill",
     or "new_skill"/"old_skill"), each containing a list of run results.
     """
-    # Support both layouts: eval dirs directly under benchmark_dir, or under runs/
+    # Support eval dirs directly under benchmark_dir, or under legacy runs/.
     runs_dir = benchmark_dir / "runs"
-    if runs_dir.exists():
-        search_dir = runs_dir
-    elif list(benchmark_dir.glob("eval-*")):
-        search_dir = benchmark_dir
-    else:
+    search_dir = runs_dir if runs_dir.is_dir() else benchmark_dir
+    candidates = search_dir.iterdir() if search_dir.is_dir() else ()
+    eval_dirs = sorted(
+        path
+        for path in candidates
+        if path.is_dir()
+        and (path.name.startswith("eval-") or (path / "eval_metadata.json").is_file())
+    )
+    if not eval_dirs:
         print(f"No eval directories found in {benchmark_dir} or {benchmark_dir / 'runs'}")
         return {}
 
     results: dict[str, list] = {}
 
-    for eval_idx, eval_dir in enumerate(sorted(search_dir.glob("eval-*"))):
+    for eval_idx, eval_dir in enumerate(eval_dirs):
         metadata_path = eval_dir / "eval_metadata.json"
         if metadata_path.exists():
             try:
@@ -115,17 +121,27 @@ def load_run_results(benchmark_dir: Path) -> dict:
 
         # Discover config directories dynamically rather than hardcoding names
         for config_dir in sorted(eval_dir.iterdir()):
-            if not config_dir.is_dir():
+            if not config_dir.is_dir() or config_dir.name in {"inputs", "outputs"}:
                 continue
-            # Skip non-config directories (inputs, outputs, etc.)
-            if not list(config_dir.glob("run-*")):
+            run_dirs = sorted(
+                path
+                for path in config_dir.glob("run-*")
+                if path.is_dir() and path.name.removeprefix("run-").isdecimal()
+            )
+            # Numbered runs take precedence if both layouts are present.
+            if not run_dirs and (config_dir / "grading.json").is_file():
+                run_dirs = [config_dir]
+            # Skip non-config directories (inputs, outputs, etc.).
+            if not run_dirs:
                 continue
             config = config_dir.name
             if config not in results:
                 results[config] = []
 
-            for run_dir in sorted(config_dir.glob("run-*")):
-                run_number = int(run_dir.name.split("-")[1])
+            for run_dir in run_dirs:
+                run_number = (
+                    1 if run_dir == config_dir else int(run_dir.name.removeprefix("run-"))
+                )
                 grading_file = run_dir / "grading.json"
 
                 if not grading_file.exists():
